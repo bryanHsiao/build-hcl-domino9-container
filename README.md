@@ -30,7 +30,10 @@ The procedure was developed through ~20 build iterations on Windows 11 + WSL2 + 
 | [ADDITIONAL-SERVER.md](ADDITIONAL-SERVER.md) | Driving the Notes Admin setup wizard to join a container into an existing Domino domain |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | The five non-obvious pitfalls already patched in this Dockerfile (read this even if you don't hit problems — it explains why the Dockerfile looks the way it does) |
 | [DOMINOCTL.md](DOMINOCTL.md) | Optional: install Daniel Nashed's `dominoctl` host-side wrapper for `domino start / stop / status / restart` |
-| `dockerfiles/domino9.0.1-fp10-ubi7/` | The actual `Dockerfile`, `entrypoint.sh`, `silent.properties`, `.gitignore` |
+| [BASE-AND-FP-LAYERS.md](BASE-AND-FP-LAYERS.md) | Alternative: build a 9.0.1 base image, then apply Fix Pack as a separate layer (recommended for testing multiple FPs from one base) |
+| `dockerfiles/domino9.0.1-fp10-ubi7/` | Recommended: one-shot 9.0.1 + FP10 in a single image |
+| `dockerfiles/domino9.0.1-base-ubi7/` | Alternative: 9.0.1 base only, no FP |
+| `dockerfiles/domino9.0.1-fp10-on-base/` | Alternative: FP10 layered on top of a `domino9:9.0.1` image |
 
 ## TL;DR for someone who already knows Domino
 
