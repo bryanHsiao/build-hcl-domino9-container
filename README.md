@@ -124,3 +124,133 @@ Single maintainer, hobby / internal-research origin. PRs accepted but no SLA. Th
 MIT — for the scripts and documentation in this repository.
 
 See [LICENSE](LICENSE). HCL Domino itself is **not** covered.
+
+---
+---
+
+# 繁體中文版
+
+> **在 RHEL UBI 7 上自建 HCL Domino 9.0.x 的 container image**，已於 WSL2 + Docker Engine 完成驗證。
+
+實機驗證版本：**HCL Domino 9.0.1 FP10**（9.x 系列最後一版）。
+
+---
+
+## 關於品牌：IBM vs HCL
+
+Domino 9.0.x 是 **IBM 時代**的產品（9.0.1 base 於 2013 釋出、FP10 於 2018 釋出）。此 image 內的 binary 啟動 log 仍會印 `IBM Domino (r) Server`，安裝路徑也是 `/opt/ibm/domino/...` — 這是歷史事實，本 repo 沒改任何東西。
+
+**HCL Technologies 在 2019 年從 IBM 手中收購了 Notes/Domino 產品線。** 自此之後，Domino 9（以及後續所有版本）的 entitlement、FlexNet 下載、EULA、support 合約、產品文件全部由 HCL 管理。9.x 的 binary 本身沒有被重新 brand — 但**圍繞它的整個生態系**（去哪拿安裝媒體、找誰報問題、誰維護新版本修補）完完全全是 HCL。
+
+本 repo 名字用 **「hcl-domino9」**就是為了對齊現任生態系：如果你今天想部署 Domino 9，你手上的 entitlement 幾乎一定是 HCL 給的（不是 IBM 殘留的），會去操作的也是 HCL 的入口網站。Repo 描述的是 **HCL 時代的 Domino 9 維運作業**，雖然 *artifact 本身*（binary）來自 IBM 時代。
+
+---
+
+## 這個 repo 存在的原因
+
+HCL 從 Domino 10.0.1 FP3 起才提供官方 container image。對於還在跑 Domino 9.x 並想做 Dev/Test 容器化、升級演練、或保留 legacy server 的組織來說，沒有官方路線。
+
+本 repo 完整記錄一條可運作的步驟：
+
+1. 從 HCL silent installer build 出 Domino 9.0.1 FP10 的 container image
+2. 啟動為 `server -listen` 模式以便 Notes Admin client 跑首次設定
+3. 透過 setup wizard 把容器加入既有的 Domino domain（additional server 流程）
+4. 以正常 server 模式運行 HTTP / NRPC / LDAP / IMAP / POP3 / SMTP
+
+整個流程經過 ~20 次 build 迭代於 Windows 11 + WSL2 + Docker Engine 29.5.2 上完成驗證，並針對 HCL 官方文件未明確提及的**五個非顯而易見的踩坑**做了 patch。
+
+⚠ **先讀 [DISCLAIMER.md](DISCLAIMER.md)。** 你必須擁有自己的 HCL Domino 9 entitlement 與安裝媒體。本 repo 不發行任何 HCL 軟體。
+
+## 文件導覽
+
+| 檔案 | 內容 |
+|---|---|
+| [DISCLAIMER.md](DISCLAIMER.md) | HCL EULA、support boundary、MIT license 涵蓋範圍、EOM/EOS 日期 |
+| [BUILD.md](BUILD.md) | 逐步 build SOP：環境、安裝媒體、`docker build`、首次啟動 |
+| [ADDITIONAL-SERVER.md](ADDITIONAL-SERVER.md) | 操作 Notes Admin setup wizard 把容器加入既有 Domino domain |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | 本 Dockerfile 已 patched 的五大踩坑（即使你沒遇到問題也建議讀，解釋 Dockerfile 為什麼長這樣） |
+| [DOMINOCTL.md](DOMINOCTL.md) | 選用：安裝 Daniel Nashed 的 `dominoctl` host 端 wrapper，可用 `domino start / stop / status / restart` |
+| [BASE-AND-FP-LAYERS.md](BASE-AND-FP-LAYERS.md) | 替代做法：先 build 9.0.1 base image，再以獨立 layer 套用 Fix Pack（適合需要從同一 base 測多個 FP 的場景） |
+| `dockerfiles/domino9.0.1-fp10-ubi7/` | 推薦：一次 build 出含 9.0.1 + FP10 的單一 image |
+| `dockerfiles/domino9.0.1-base-ubi7/` | 替代：只裝 9.0.1 base、不含 FP |
+| `dockerfiles/domino9.0.1-fp10-on-base/` | 替代：將 FP10 以 layered image 形式疊在 `domino9:9.0.1` 上面 |
+
+## TL;DR（給已經熟悉 Domino 的人）
+
+```bash
+# 1. 從 HCL FlexNet 取得安裝媒體（你的責任）
+cd dockerfiles/domino9.0.1-fp10-ubi7
+cp ~/Downloads/DOMINO_9.0.1_64_BIT_LIN_XS_EN.tar  .
+cp ~/Downloads/domino901FP10_linux64_x86.tar       .
+
+# 2. Build
+docker build -t domino9:9.0.1fp10 .
+
+# 3. 啟動（全新 — 進入 setup wizard 模式）
+docker volume create domino9-data
+docker run -d --name domino9 \
+  -p 1352:1352 -p 80:80 -p 8585:8585 \
+  -v domino9-data:/local/notesdata \
+  domino9:9.0.1fp10
+
+# 4. 從本機的 Notes Admin client 執行：
+#    serversetup.exe -remote 127.0.0.1:8585
+#    → 走完 setup wizard
+
+# 5. 停掉、移除、帶 server.id 密碼重啟
+docker rm -f domino9
+docker run -d --name domino9 \
+  -p 1352:1352 -p 80:80 -p 8585:8585 \
+  -v domino9-data:/local/notesdata \
+  -e DOMINO_ID_PASSWORD='你的-server.id-密碼' \
+  domino9:9.0.1fp10
+
+# 6. 驗證
+curl -sI http://localhost/
+# HTTP/1.1 200 OK
+# Server: Lotus-Domino
+```
+
+完整流程見 [BUILD.md](BUILD.md) 與 [ADDITIONAL-SERVER.md](ADDITIONAL-SERVER.md)。
+
+## 本 Dockerfile 已 patched 的五大踩坑
+
+Dockerfile 之所以這樣寫，是因為下列五個踩坑。完整 root-cause 分析見 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)：
+
+1. **RHEL UBI 7 預設不含 `hostname` 指令** — `install.pl` 會觸發 `Undefined subroutine &DingDong::out` 的 Perl 錯誤。修法：`yum install hostname`。
+2. **Fix Pack installer 不接受 `-silent` 旗標** — 它用 `-script <file>` 而非 `-silent`。修法：FP install 步驟拿掉 `-silent`。
+3. **內建的 IBM J9 JVM 預設 heap 太小** — Notes Admin client 連到 setup wizard 時觸發 `java.lang.OutOfMemoryError`。修法：用 `sed -i` patch `serversetup` 加上 `-Xmx512m -Xms128m`。
+4. **Domino 9 的 `notes.ini` 沒有 `ServerName=` 那行** — entrypoint 必須改用 `^Setup=[0-9]` 偵測「setup 完成」狀態。
+5. **加密過的 `server.id` 會卡住 server 啟動** — 必須透過 stdin 把密碼餵給 `server`。修法：entrypoint 認 `DOMINO_ID_PASSWORD` env var。
+
+## 已驗證項目
+
+| 項目 | 狀態 |
+|---|---|
+| Windows 11 + WSL2 + Docker Engine 29.5.2 環境跑 `docker build` | ✅ Image 1.48 GB |
+| 容器啟動進入 setup-listener 模式 | ✅ Port 8585 |
+| Notes Admin client `serversetup -remote` 跑完 wizard | ✅ |
+| 對既有 Domino domain 跑 additional-server setup | ✅ `names.nsf` replicate 約 5-15 分鐘 |
+| 帶 `DOMINO_ID_PASSWORD` 進 normal mode | ✅ 所有 server task 啟動 |
+| 從 host 瀏覽器測 HTTP 200 | ✅ `Server: Lotus-Domino` |
+| Image 可攜性（`docker save` → 新 distro 內 load） | ✅ 端到端約 6 分鐘 |
+| RHEL UBI 8 次 PoC | ❌ 已 documented 為不相容 — 見 TROUBLESHOOTING.md §6 |
+
+## 開發期使用的 build 環境
+
+- Host: Windows 11
+- WSL: WSL2 + 隔離專用的 Ubuntu 24.04 LTS distro
+- Docker: Docker Engine 29.5.2（不是 Docker Desktop，但 Docker Desktop 應該也能跑）
+- 目標 image: `domino9:9.0.1fp10`（1.48 GB）
+
+其他 host 環境（原生 Linux、Mac + Docker Desktop 等）Dockerfile 本身應該可攜；host 層級的前置需求（[BUILD.md](BUILD.md) §1）可能需要微調。
+
+## 維護狀態
+
+單人維護，研究/興趣性質。歡迎 PR，但無 SLA。維護者主要 use case 是 Domino 9.0.1 FP10 的內部 Dev/Test — 其他 9.0.x 次版本的 issue 只能提供 best-effort 協助。
+
+## 授權
+
+MIT — 僅涵蓋本 repo 內的腳本與文件。
+
+詳見 [LICENSE](LICENSE)。HCL Domino 本身**不**在此 license 涵蓋範圍。
