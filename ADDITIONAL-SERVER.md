@@ -177,6 +177,73 @@ If both succeed, the additional server is fully operational.
 
 To run `domino start / stop / restart / status / bash / logs / inspect` instead of long `docker ...` invocations, see [DOMINOCTL.md](DOMINOCTL.md).
 
+## Step 11 — Notes client connectivity: the NetAddress gotcha
+
+After everything above is working, a Notes Administrator client connecting to the container will often hit:
+
+```
+找不到伺服器的路徑 / Server path not found
+Please check your network or VPN connection. ...
+```
+
+**Even though**:
+
+- HTTP (port 80) from a browser works
+- `Test-NetConnection 127.0.0.1 -Port 1352` returns True
+- The Domino server inside the container shows `Database Server started` and accepting NRPC
+
+### Why this happens
+
+HTTP (port 80) talks pure IP — `localhost` → 127.0.0.1, request goes through, no Domino Directory lookup. **Browser does not care what the server's hierarchical name is.**
+
+NRPC (port 1352) is different:
+
+1. The Notes client TCP-connects to `127.0.0.1:1352` ✓
+2. The server replies during NRPC handshake: "I am `CN=YourServer/O=YourOrg`"
+3. **The Notes client now looks up `YourServer/YourOrg` in its local `names.nsf`**
+4. It finds the Server document (it's been replicated from the master long before)
+5. Inside that Server document, the **`NetAddress` field** is `yourserver.yourorg.example.com` — the real corporate DNS name registered by your admin
+6. The Notes client then "validates" the connection by trying to reach the server at the registered NetAddress
+7. Your laptop's DNS resolves `yourserver.yourorg.example.com` to the real production IP (or fails entirely if you're off-VPN)
+8. That real IP is **not** 127.0.0.1, so the validation fails
+9. Notes reports "Server path not found"
+
+This is a Domino design choice that protects against DNS hijacking but bites hard when you're intentionally running a container that *masquerades* as a domain member.
+
+### Fix A — hosts file alias (simplest)
+
+Edit `C:\Windows\System32\drivers\etc\hosts` (requires admin):
+
+```
+127.0.0.1   yourserver.yourorg.example.com
+```
+
+Use the **exact** hostname that's in your server's NetAddress field. Save.
+
+Then in the Notes Admin client "Open Application" dialog, type the **hierarchical name** (`YourServer/YourOrg`) instead of `127.0.0.1`. Notes will:
+
+1. Look up `YourServer/YourOrg` in `names.nsf` → find NetAddress `yourserver.yourorg.example.com`
+2. DNS resolve via your edited hosts → 127.0.0.1
+3. Connect to container ✓
+
+### Fix B — Connection document in Notes client
+
+In Notes Admin: File → Locations → edit your current location → add a Connection document:
+
+| Field | Value |
+|---|---|
+| Server name | `YourServer/YourOrg` |
+| Use the port | TCPIP |
+| Destination server address | `127.0.0.1` |
+
+This Connection document overrides the Server document's NetAddress for that specific server. Cleaner than editing the OS hosts file, but you have to remember to maintain it.
+
+### Caveat
+
+If the hostname you alias to 127.0.0.1 is the **same** as a server you also need to reach normally (e.g., the real production server with the same name), you can only use one at a time. The pragmatic fix: comment out the hosts line when you don't need the container, uncomment when you do.
+
+For permanent mixed access, give the container a different hierarchical name (e.g., `YourServerTest/YourOrg` registered as a separate server doc) — that costs another `Configuration → Registration → Server` round-trip with your admin.
+
 ## Troubleshooting
 
 | Symptom | Action |
@@ -187,6 +254,7 @@ To run `domino start / stop / restart / status / bash / logs / inspect` instead 
 | `names.nsf` replication appears to hang | Check directory size on the existing server; large directories (10000+ persons) can take 10–20 min. Look at `docker logs domino9` for replicate progress. |
 | Wizard finishes but server keeps relaunching wizard on restart | This Dockerfile uses `^Setup=[0-9]` heuristic to detect setup-complete, which is correct for Domino 9 (no `ServerName=` line in notes.ini). If you still see this, manually check `docker exec domino9 grep "^Setup=" /local/notesdata/notes.ini` |
 | Server starts but HTTP not listening | Check that `HTTP` is in the `ServerTasks=` line of `notes.ini`. If missing, `docker exec domino9 /opt/ibm/domino/bin/server -c "load http"` |
+| Notes client "Server path not found" / 「找不到伺服器的路徑」 connecting to `127.0.0.1` (but HTTP works) | NRPC client follows the NetAddress in the server doc. See Step 11 above for the hosts-file fix or Connection-document workaround. |
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for deeper diagnosis.
 
@@ -374,6 +442,73 @@ nc -z localhost 1352 && echo "OK 1352"
 
 要用 `domino start / stop / restart / status / bash / logs / inspect` 取代冗長的 `docker ...` 指令，請見 [DOMINOCTL.md](DOMINOCTL.md)。
 
+## Step 11 — Notes client 連線：NetAddress gotcha
+
+前面都跑完之後，用 Notes Administrator client 連 container 時很常會撞到：
+
+```
+找不到伺服器的路徑
+請檢查您的網路或 VPN 連線。...
+```
+
+**即使**：
+
+- 瀏覽器走 HTTP（port 80）能通
+- `Test-NetConnection 127.0.0.1 -Port 1352` 回 True
+- Container 內的 Domino server log 顯示 `Database Server started`、NRPC 在 listen
+
+### 為什麼會這樣
+
+HTTP（port 80）走純 IP — `localhost` → 127.0.0.1，連線過去就好，**不查 Domino Directory**。瀏覽器不在乎 server 的 hierarchical name 是什麼。
+
+NRPC（port 1352）不一樣：
+
+1. Notes client 對 `127.0.0.1:1352` TCP-connect ✓
+2. NRPC handshake 時，server 回應「我是 `CN=YourServer/O=YourOrg`」
+3. **Notes client 此刻去自己本機的 `names.nsf` 查 `YourServer/YourOrg`**
+4. 找到 Server document（早就從 master 同步過來了）
+5. 該 Server document 內的 **`NetAddress` 欄位**寫的是 `yourserver.yourorg.example.com` — admin 註冊時填的公司真實 DNS name
+6. Notes client 接著**用註冊的 NetAddress 重新「驗證」連線**
+7. 你筆電的 DNS 把 `yourserver.yourorg.example.com` 解析到真實 production IP（或斷 VPN 時根本解析不到）
+8. 那個真實 IP **不是** 127.0.0.1，驗證失敗
+9. Notes 報「找不到伺服器的路徑」
+
+這是 Domino 為了防 DNS hijack 的設計，但你刻意跑容器假扮 domain 成員時就會被擋。
+
+### 修法 A — hosts 檔別名（最簡單）
+
+編輯 `C:\Windows\System32\drivers\etc\hosts`（需要 admin 權限），加一行：
+
+```
+127.0.0.1   yourserver.yourorg.example.com
+```
+
+用 server 的 NetAddress 欄位**確切**的 hostname。存檔。
+
+然後 Notes Admin「開啟應用程式」對話框改打**hierarchical name**（`YourServer/YourOrg`）而非 `127.0.0.1`。Notes 會：
+
+1. 去 `names.nsf` 找 `YourServer/YourOrg` → 找到 NetAddress `yourserver.yourorg.example.com`
+2. 透過你修改過的 hosts 解析 → 127.0.0.1
+3. 連到 container ✓
+
+### 修法 B — Notes client 加 Connection document
+
+Notes Admin → File → Locations → 編輯目前 location → 加一筆 Connection document：
+
+| 欄位 | 值 |
+|---|---|
+| Server name | `YourServer/YourOrg` |
+| Use the port | TCPIP |
+| Destination server address | `127.0.0.1` |
+
+這條 Connection document 會 override 該 server doc 內的 NetAddress。比改 OS hosts 乾淨，但要記得維護。
+
+### 注意
+
+如果你 alias 到 127.0.0.1 的 hostname 跟你**正常工作時也要連的真實 server**同名（例如真正的 production server），那兩者一次只能用一個。實務做法：不用 container 時把 hosts 那行 `#` 註解掉，要用時取消註解。
+
+如果要長期混用，給 container 取**不同**的 hierarchical name（例如 `YourServerTest/YourOrg` 另外註冊一筆 server doc）— 這要再請 admin 跑一次 `Configuration → Registration → Server`。
+
 ## 疑難排解
 
 | 症狀 | 處理 |
@@ -384,5 +519,6 @@ nc -z localhost 1352 && echo "OK 1352"
 | `names.nsf` replication 看起來卡住 | 檢查既有 server 上 Domino Directory 大小；大型 directory（10000+ persons）可能需要 10–20 分鐘。看 `docker logs domino9` 內 replicate 進度。 |
 | Wizard 跑完，但重啟後 server 又重新跑 wizard | 本 Dockerfile 用 `^Setup=[0-9]` heuristic 偵測 setup-complete，這對 Domino 9 是正確的（notes.ini 內沒有 `ServerName=` 那行）。若仍如此，手動檢查 `docker exec domino9 grep "^Setup=" /local/notesdata/notes.ini` |
 | Server 啟動但 HTTP 沒在聽 | 檢查 `notes.ini` 的 `ServerTasks=` 行是否包含 `HTTP`。沒有的話：`docker exec domino9 /opt/ibm/domino/bin/server -c "load http"` |
+| Notes client 連 `127.0.0.1` 報「找不到伺服器的路徑」（但 HTTP 通） | NRPC client 會走 server doc 內的 NetAddress 重新驗證。見上方 Step 11 — 用 hosts 別名或 Connection document 修。 |
 
 更深入的診斷見 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)。
