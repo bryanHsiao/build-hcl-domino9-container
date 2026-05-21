@@ -39,6 +39,7 @@ The procedure was developed through ~20 build iterations on Windows 11 + WSL2 + 
 | [BUILD.md](BUILD.md) | Step-by-step build SOP: environment, installer media, `docker build`, first launch |
 | [ADDITIONAL-SERVER.md](ADDITIONAL-SERVER.md) | Driving the Notes Admin setup wizard to join a container into an existing Domino domain |
 | [OPERATIONS.md](OPERATIONS.md) | Day-2 ops: start / stop / restart / status / logs / auto-restart on host reboot (with and without `dominoctl`) |
+| [VOLUMES.md](VOLUMES.md) | When to use a Docker named volume vs a bind mount for `/local/notesdata`; full bind-mount recipe for dev/test; migration both directions |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | The five non-obvious pitfalls already patched in this Dockerfile (read this even if you don't hit problems — it explains why the Dockerfile looks the way it does) |
 | [DOMINOCTL.md](DOMINOCTL.md) | Optional: install Daniel Nashed's `dominoctl` host-side wrapper for `domino start / stop / status / restart` |
 | [BASE-AND-FP-LAYERS.md](BASE-AND-FP-LAYERS.md) | Alternative: build a 9.0.1 base image, then apply Fix Pack as a separate layer (recommended for testing multiple FPs from one base) |
@@ -170,6 +171,7 @@ HCL 從 Domino 10.0.1 FP3 起才提供官方 container image。對於還在跑 D
 | [BUILD.md](BUILD.md) | 逐步 build SOP：環境、安裝媒體、`docker build`、首次啟動 |
 | [ADDITIONAL-SERVER.md](ADDITIONAL-SERVER.md) | 操作 Notes Admin setup wizard 把容器加入既有 Domino domain |
 | [OPERATIONS.md](OPERATIONS.md) | Day-2 維運：啟動 / 停止 / 重啟 / 狀態 / logs / host 重開機後自動帶起（含 `dominoctl` 與純 docker 兩種寫法） |
+| [VOLUMES.md](VOLUMES.md) | `/local/notesdata` 該用 Docker named volume 還是 bind mount；dev/test 完整 bind mount recipe；雙向遷移 |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | 本 Dockerfile 已 patched 的五大踩坑（即使你沒遇到問題也建議讀，解釋 Dockerfile 為什麼長這樣） |
 | [DOMINOCTL.md](DOMINOCTL.md) | 選用：安裝 Daniel Nashed 的 `dominoctl` host 端 wrapper，可用 `domino start / stop / status / restart` |
 | [BASE-AND-FP-LAYERS.md](BASE-AND-FP-LAYERS.md) | 替代做法：先 build 9.0.1 base image，再以獨立 layer 套用 Fix Pack（適合需要從同一 base 測多個 FP 的場景） |
