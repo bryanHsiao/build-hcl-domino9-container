@@ -1,0 +1,23 @@
+# Domino installer media — HCL EULA bound, NEVER commit
+*.tar
+*.tar.gz
+*.tgz
+
+# Server / certifier / admin identity files
+*.id
+
+# Runtime data dir
+notesdata/
+**/notesdata/
+
+# Docker image tarballs
+domino9-*.tar
+Domino_*_Container_Image.*
+
+# Editor / OS clutter
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/

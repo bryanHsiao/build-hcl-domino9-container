@@ -1,0 +1,11 @@
+# Per spec domino9-container-image-poc / Requirement: Build context hygiene
+# (project-root .gitignore also covers these; kept here for explicit local scope)
+
+# Domino installer media (HCL EULA bound, never commit)
+*.tar
+
+# Server / certifier identity files
+*.id
+
+# Runtime data dir (notes.ini, mail.box, log.nsf, ...) — should live in docker volume
+notesdata/
