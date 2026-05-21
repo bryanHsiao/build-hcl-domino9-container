@@ -6,6 +6,16 @@ Verified target: **HCL Domino 9.0.1 FP10** (the final 9.x release).
 
 ---
 
+## A note on the brand: IBM vs HCL
+
+The 9.0.x series was developed under **IBM** (base 9.0.1 shipped in 2013, FP10 in 2018). The binaries in this image still print `IBM Domino (r) Server` on startup, and the on-disk install paths use `/opt/ibm/domino/...` — that is historically accurate and unchanged by anything in this repo.
+
+**HCL Technologies acquired the Notes/Domino product line from IBM in 2019.** Since then, all entitlements, FlexNet downloads, EULA, support contracts, and product documentation for Domino 9 (and every version since) are administered by HCL. The 9.x binary itself was never rebranded — but the *ecosystem around it* (where you get installers, who you call for support, who maintains fixes for newer versions) is entirely HCL.
+
+This repo's name uses **"hcl-domino9"** to align with that current ecosystem: if you are reading this and thinking about deploying Domino 9, you almost certainly hold an HCL entitlement (not a residual IBM one) and will interact with HCL's portals. The repo is *about* HCL-era Domino 9 operation, even though the *artifact* (the binary itself) is from the IBM era.
+
+---
+
 ## Why this repo exists
 
 HCL only ships official container images for Domino 10.0.1 FP3 and newer. For organizations still running Domino 9.x and wanting to containerize for Dev/Test, migration rehearsal, or legacy-server preservation, there is no official path.
